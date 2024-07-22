@@ -7,3 +7,6 @@
 /liblammps.a
 /lmp
 /styles
+*.gif
+*.mp4
+log.lammps
