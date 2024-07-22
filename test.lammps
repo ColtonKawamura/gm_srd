@@ -40,6 +40,7 @@ variable	e_n equal .10 #restiution coefficient
 variable	kn equal 100
 variable	meff equal ${mass_particle}^2/(2*${mass_particle}) #From J.Shafer, under equation 1
 variable	t_n equal sqrt(${meff}/${kn}*(1/${PI}^2+(ln(${e_n}/${meff})^2)))
+# variable	gamma_n equal -2*ln(${e_n})/${t_n}
 variable	gamma_n equal 10000
 variable	xmu equal 0.01
 variable	dampflag equal 1 #1 on, 0 off
@@ -65,17 +66,15 @@ else &
 read_data	./packings/input_file.lammps
 
 ###############################################
-# Set the interactions between particles
+# PAIR STYLES
 ###############################################
-# Spring law
 if "${fric} == 1" then & 
 	"pair_style gran/hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${xmu} ${dampflag}" &
 else & 
 	"pair_style	gran/hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} 0 ${dampflag}" 
 pair_coeff	* *
 
-# viscosity
-fix 		apply_viscous all viscous .01
+fix 		apply_viscous all viscous .8 # orginal .01
 
 ###############################################
 # Create and Adjust Particles
@@ -95,31 +94,38 @@ group		flow type 1
 fix 		allow_flow_movement flow nve/sphere
 
 # SRD Particles
-## Create the particles in a box
+group      		srd_particles type 4
 variable     	density_srd equal 100  # number density
 variable     	vol equal 10
-# region        	box block $(xlo) $(xhi) $(ylo) $(yhi) $(zlo) $(zhi)
 region        	box block .8 2 .8 2 .8 2
 create_atoms  	4 random $(v_density_srd*v_vol) 1 box # create_atoms type random N_to_create seed region_ID
 set				type 4 mass 0.001
 set				type 4 diameter 0.001
-## Grroput them all together and allow movmement, velocity, and SRD to theg roup
-group      		srd_particles type 4
-fix 			allow_srd_movement srd_particles nve/sphere
-velocity		srd_particles create 1 593849 loop geom # Create [temp seed]
-fix	        	enable_srd srd_particles srd 20 flow 100 0.2 1 overlap yes cubic warn .5 lamda .6 inside warn
+velocity		srd_particles create 1 1 loop geom # Create [temp seed]
+group       srd_particles type 4
 
-# Box enviroment
+fix 		allow_srd_movement srd_particles nve/sphere
+velocity	srd_particles create 0.001 593849 loop geom
+fix	        enable_srd srd_particles srd 20 flow .001 0.2 49894 overlap yes cubic warn .5 lamda .6 inside warn
 fix         containing_wall all wall/reflect zlo -1 zhi 5.6 # Prevents particles from flying off to infinity
 
+########### TIME STEPS TO DELAY FOR THE N^2 BUILD ################
+# neigh_modify	delay 100 every 100 check yes
+neigh_modify	exclude type 2 2
+neigh_modify	exclude type 3 3
+neigh_modify	exclude type 2 3
+neigh_modify 	exclude type 4 4
+neigh_modify	one 10000 # added because more SRD particles needed mroe neighbor list
+#neigh_modify	delay 5
+
 ###############################################
-# Adjust tracking of neighbors for computational ease
+# GROUPS
 ###############################################
-neigh_modify	exclude type 2 2 # No measuring the interction between wall particles
-neigh_modify	exclude type 3 3 # No measuring the interction between wall particles
-neigh_modify	exclude type 2 3 # No measuring the interction between wall particles
-neigh_modify 	exclude type 4 4 
-neigh_modify	one 10000 # added because more SRD particles needed more bins for neighbors because there's so many
+# group		lower type 2 	
+# group		upper type 3 	
+# group		flow type 1 	
+# group       srd_particles type 4
+
 
 ###############################################
 # COMPUTES
@@ -151,6 +157,15 @@ fix extra all print 10005  	"""
 """
 
 ###############################################
+# FIXES
+###############################################
+# fix 		allow_flow_movement flow nve/sphere
+# fix 		allow_upper_movement upper move linear 0.0 0.0 NULL
+# fix			force_upper_movement upper aveforce 0.0 0.0 -${P}
+# fix         containing_wall all wall/reflect zlo $(zlo) zhi $(zhi)
+
+
+###############################################
 # THERMODYNAMIC PARAMETERS
 ###############################################
 thermo_style	custom step atoms ke vol
@@ -160,11 +175,39 @@ thermo_modify	lost ignore norm no
 compute_modify	thermo_temp dynamic/dof yes 
 
 ###############################################
+# EXPERIMENTAL
+###############################################
+variable ke equal ke
+# variable       density_srd equal 100  # number density
+# variable       vol equal 10
+# region         box block $(xlo) $(xhi) $(ylo) $(yhi) $(zlo) $(zhi)
+# region        	box block .8 2 .8 2 .8 2
+# create_atoms   4 random $(v_density_srd*v_vol) 1 box # create_atoms type random N_to_create seed region_ID
+# set		type 4 mass 0.001
+# set		type 4 diameter 0.001
+
+# set		type 2 diameter 3 # changed to large because SRD particles slipping through. Wall is a nontrival option as it can't move outside of sinusoidal
+# set		type 3 diameter 3 # "
+
+
+
+# delete_atoms	overlap 0.5 srd_particles flow # first group is deleted
+# neighbor	0.3 multi
+# neigh_modify	delay 0 every 1 check yes
+
+# comm_modify	mode multi group flow vel yes
+# neigh_modify	include flow
+
+# use fix SRD to push small particles out from inside big ones
+
+
+
+###############################################
 # OUTPUTS
 ###############################################
-dump movie_system all movie 10000 ./movies/movie.IC.${friction_status}.Pressure_${dimensionless_p}.mp4 type type zoom 1 size 1280 720
+dump movie_system all movie 10000 ./movie.IC.${friction_status}.Pressure_${dimensionless_p}.mp4 type type zoom 1 size 1280 720
 dump_modify movie_system adiam 4 .05 adiam 2 .1 adiam 3 .1
-dump gif_system all movie 10000 ./movies/movie.IC.${friction_status}.Pressure_${dimensionless_p}.gif type type zoom 1 size 1280 720
+dump gif_system all movie 10000 ./movie.IC.${friction_status}.Pressure_${dimensionless_p}.gif type type zoom 1 size 1280 720
 dump_modify gif_system adiam 4 .05 adiam 2 .1 adiam 3 .1
 
 ###############################################
@@ -176,7 +219,7 @@ fix short_ave all ave/time 10 100 1000 v_ke
 
 label 		loop
 variable 	Loop_Count loop 10000
-run 		10000 
+run 		10000
 variable diffke equal abs(f_long_ave-f_short_ave)
 if "${diffke} <= 0.00000001" then "jump SELF break"
 next Loop_Count
