@@ -17,6 +17,8 @@
 # All questions regarding this script send to colton.kawamura1@nps.edu
 ###############################################
 
+
+
 ###############################################
 # ENVIRONMENT
 ###############################################
@@ -50,7 +52,6 @@ variable	time equal step*dt
 # variable	dimensionless_p equal ${P}*${d_ave}/${kn}
 variable	P equal ${dimensionless_p}*${kn}/${d_ave}
 variable	pressure_phase1 equal 20
-variable	pressure_phase2 equal 1
 
 if "${fric} == 1" then & 
 	"variable friction_status string Friction_ON" &
@@ -60,8 +61,8 @@ else &
 ###############################################
 # Read a data file of particle positions
 ###############################################
-read_data	./packings/input_small_flow.lammps
-# read_data	./packings/input_file.lammps
+# read_data	./packings/input_small_flow.lammps
+read_data	./packings/input_file.lammps
 
 ###############################################
 # Set the interactions between particles
@@ -80,25 +81,26 @@ fix 		apply_viscous all viscous 1
 ###############################################
 # Create and Adjust Particles
 ###############################################
-##  Lower wall particles
+#  Lower wall particles
 group		lower type 2 	
 set			type 2 diameter 3 # changed to large because SRD particles slipping through. Wall is a nontrival option as it can't move outside of sinusoidal
-variable	FREQ equal 1
+variable	FREQ equal 3
 variable	PER equal 1/${FREQ}
-fix 		wiggle_lower lower move wiggle 0 0 ${AMP} ${PER}
+# fix 		wiggle_lower lower move wiggle 0 0 ${AMP} ${PER}
 
-## Upper Wall particles
+# Upper Wall particles
 group		upper type 3 
 set			type 3 diameter 3 # changed to large because SRD particles slipping through. Wall is a nontrival option as it can't move outside of sinusoidal
-fix 		allow_upper_movement upper move linear 0.0 0.0 NULL # NULL allows group to have velocity as integrated by the force on it
-fix			force_upper_movement upper aveforce 0.0 0.0 -${pressure_phase1}
+# fix 		allow_upper_movement upper move linear 0.0 0.0 NULL # NULL allows group to have velocity as integrated by the force on it
+# fix			force_upper_movement upper aveforce 0.0 0.0 -${pressure_phase1}
+fix 		allow_upper_movement upper nve/sphere
 
-## Middle particles that can flow
+# Middle particles that can flow
 group		flow type 1 
 fix 		allow_flow_movement flow nve/sphere
 
-## SRD Particles
-### Create the particles in a box
+# SRD Particles
+## Create the particles in a box
 variable     	density_srd equal 100  # number density
 variable     	vol equal 10
 region        	box block $(xlo) $(xhi) $(ylo) $(yhi) $(zlo) $(zhi)
@@ -106,15 +108,27 @@ region        	box block $(xlo) $(xhi) $(ylo) $(yhi) $(zlo) $(zhi)
 create_atoms  	4 random $(v_density_srd*v_vol) 1 box # create_atoms type random N_to_create seed region_ID
 set				type 4 mass 0.001
 set				type 4 diameter 0.001
-### Group them all together and allow movmement, velocity, and SRD to theg roup
+## Group them all together and allow movmement, velocity, and SRD to theg roup
 group      		srd_particles type 4
 fix 			allow_srd_movement srd_particles nve/sphere
 velocity		srd_particles create 1 593849 loop geom # Create [temp seed]
-fix	        	enable_srd srd_particles srd 20 all 1 0.2 1 overlap yes cubic warn .5 lamda .6 inside warn
+fix	        	enable_srd srd_particles srd 20 flow 1 0.2 1 overlap yes cubic warn .5 lamda .6 inside warn
 
-## Box enviroment
-fix         containing_wall all wall/reflect zlo -1 zhi .6 # Prevents particles from flying off to infinity
+# Box enviroment
+# fix         containing_wall all wall/reflect zlo 0 zhi 5.6 # Prevents particles from flying off to infinity
 
+# define walls for dem particles to interact with
+delete_atoms group upper
+# variable        topwall_velocity equal -.1
+variable        topwall_velocity equal -${AMP}*${FREQ}*sin(${FREQ}*${time})
+region          top_wall plane 0 0 5.5 0 0 1 move NULL NULL v_topwall_velocity
+fix             move_top_wall all wall/gran/region hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${xmu} ${dampflag} region top_wall
+# variable        wallpos equal ${AMP}*cos(${FREQ}*${time})
+# fix             move_top_wall all wall/gran/region hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${xmu} ${dampflag} zplane 0 ${wallpos}
+
+
+# define walls for srd particles to interact with 
+# fix		        srdwall all wall/srd zhi v_topwall_velocity
 ###############################################
 # Adjust tracking of neighbors for computational ease
 ###############################################
@@ -124,7 +138,6 @@ neigh_modify	exclude type 2 3 # No measuring the interction between wall particl
 neigh_modify 	exclude type 4 4 
 neigh_modify	one 100000 # added because more SRD particles needed more bins for neighbors because there's so many
 neigh_modify	page 10000000
-
 ###############################################
 # COMPUTES
 ###############################################
@@ -140,7 +153,7 @@ compute 	5 all temp
 ###############################################
 # ON SCREEN INFORMATION
 ###############################################
-fix extra all print 10005  	"""
+fix extra all print 100  	"""
 ****************************************************************************
 *** Current Simulation is Initial Conditions PHASE I with parameters: 
 *** ${friction_status} 
@@ -151,6 +164,7 @@ fix extra all print 10005  	"""
 *** kt = ${kt}
 *** gamma_n = ${gamma_n}
 *** gamma_t = ${gamma_t}
+*** top wall velocity = ${topwall_velocity}
 ****************************************************************************
 """
 
@@ -175,8 +189,12 @@ dump_modify gif_system adiam 4 .05 adiam 2 .1 adiam 3 .1
 # RUN
 ##############################################
 variable ke equal ke
-fix long_ave flow ave/time 10 100 1000 v_ke ave window 5 #100,200,300,400...1000. Output on step 10K will be average of values on steps 5K , 6K,..., 10K
-fix short_ave flow ave/time 10 100 1000 v_ke
+fix long_ave all ave/time 10 100 1000 v_ke ave window 5 #100,200,300,400...1000. Output on step 10K will be average of values on steps 5K , 6K,..., 10K
+fix short_ave all ave/time 10 100 1000 v_ke
+
+run 1000000000 every 100 "variable topwall_velocity equal -${AMP}*${FREQ}*sin(${FREQ}*${time})"
+
+# run 1000000000 every 100 "variable        wallpos equal ${AMP}*cos(${FREQ}*${time})"
 
 label 		loop
 variable 	Loop_Count loop 10000
@@ -188,7 +206,7 @@ jump SELF loop
 label break
 
 unfix 		force_upper_movement
-fix			new_force_upper_movement upper aveforce 0.0 0.0 -${pressure_phase2}
+fix			new_force_upper_movement upper aveforce 0.0 0.0 -${pressure_phase1}
 unfix 		extra
 fix new_extra all print 10005  	"""
 ****************************************************************************
