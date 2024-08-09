@@ -1,0 +1,75 @@
+# example command: ./lmp -in ./even_simpler.lammps
+units       si
+atom_style  sphere 
+boundary    p p s
+newton      off # Needs to be on for SRD
+region        	box block 0 10 0 10 0 10
+create_box      2 box
+comm_modify	vel yes		# req for granular style; "vel yes" communicates velocity info with ghost (atoms that lie within the cuttoff distance of periodic boundary)
+
+###############################################
+# Create and Adjust Particles
+###############################################
+# wall
+variable     	density_flow equal 10  # number density
+variable     	vol equal 10
+create_atoms  	1 random $(v_density_flow*v_vol) 1 box # create_atoms type random N_to_create seed region_ID
+group           flow type 1
+fix 		    allow_flow_movement flow nve/sphere
+
+# probe particle
+create_atoms    2 single 1 1 1
+create_atoms    2 single 1 9 1
+create_atoms    2 single 9 1 1 
+create_atoms    2 single 9 9 1
+create_atoms    2 single 1 1 3
+create_atoms    2 single 1 9 3
+create_atoms    2 single 9 1 3 
+create_atoms    2 single 9 9 3
+group           probe type 2
+# fix 	    	allow_probe_movement probe nve/sphere
+fix             move_probe probe move linear 0 0 10
+
+###############################################
+# Environment 
+###############################################
+#  Time steps, etc.
+variable	dt equal 1e-7
+timestep    ${dt} # Default for si = 1e-8
+variable    time equal step*dt
+variable    step equal step
+
+#  Friction
+variable	kn equal 100
+variable    kt equal ${kn}*2/7
+variable	gamma_n equal 1
+variable    gamma_t equal ${gamma_n}*0.5
+variable	xmu equal 0.01 # static yield criterion
+variable	dampflag equal 0 #1 on, 0 off for tangential damping
+pair_style gran/hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${xmu} ${dampflag} limit_damping
+pair_coeff	* *
+
+variable        wall_velocity equal 10
+region          wall block 1 9 1 9 1 3 move NULL NULL v_wall_velocity # xlo xhi ylo yhi zlo zhi
+fix             move_wall all wall/gran/region hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${xmu} ${dampflag} region wall
+neighbor        .6 bin
+
+
+###############################################
+# ON SCREEN INFORMATION
+###############################################
+fix extra all print 100  	"""
+****************************************************************************
+*** Current Simulation is Initial Conditions PHASE I with parameters: 
+*** step = ${step}
+*** Time = ${time}
+*** dt = ${dt}
+****************************************************************************
+"""
+
+###############################################
+# OUTPUTS
+###############################################
+dump movie_system all movie 10000 ./movies/movie_simple.mp4 type type zoom 1 size 1280 720
+dump gif_system all movie 1000 ./movies/movie_simple.gif type type zoom 1 size 1280 720
+run 100000000

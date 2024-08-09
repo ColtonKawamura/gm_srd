@@ -1,0 +1,111 @@
+# example command: ./lmp -in ./simple.lammps
+units       si
+atom_style  sphere 
+boundary    p p s
+newton      on # Needs to be on for SRD
+
+read_data	./packings/input_small_flow.lammps
+# read_data	./packings/input_file.lammps
+
+###############################################
+# Environment 
+###############################################
+#  Time steps, etc.
+variable	dt equal 1e-8#
+timestep    ${dt} # Default for si = 1e-8
+variable    time equal step*dt
+variable    step equal step
+
+#  Friction
+variable	kn equal 100
+variable    kt equal ${kn}*2/7
+variable	gamma_n equal 1
+variable    gamma_t equal ${gamma_n}*0.5
+variable	xmu equal 0.01 # static yield criterion
+variable	dampflag equal 1 #1 on, 0 off for tangential damping
+pair_style gran/hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${xmu} ${dampflag} limit_damping
+pair_coeff	* *
+comm_modify	vel yes		# req for granular style; "vel yes" communicates velocity info with ghost (atoms that lie within the cuttoff distance of periodic boundary)
+
+###############################################
+# Create and Adjust Particles
+###############################################
+##  Lower wall particles
+group		lower type 2 	
+set			type 2 diameter 3 # changed to large because SRD particles slipping through.
+variable	FREQ equal 1
+variable	AMP equal  0
+variable	PER equal 1/${FREQ}
+fix 		wiggle_lower lower move wiggle 0 0 ${AMP} ${PER}
+
+## Upper Wall particles
+group		upper type 3 
+set			type 3 diameter 3 # changed to large because SRD particles slipping through. Wall is a nontrival option as it can't move outside of sinusoidal
+fix 		allow_upper_movement upper move linear 0.0 0.0 NULL # NULL allows group to have velocity as integrated by the force on it
+variable    pressure_phase1 equal 500
+fix			force_upper_movement upper aveforce 0.0 0.0 -${pressure_phase1}
+fix         upper_viscous upper viscous 10
+
+
+## Middle particles that can flow
+group		flow type 1 
+fix 		allow_flow_movement flow nve/sphere
+fix         flow_viscous flow viscous 20
+
+## SRD Particles
+### Create the particles in a box
+variable     	density_srd equal 10  # number density
+variable     	vol equal 10
+region        	box block $(xlo) $(xhi) $(ylo) $(yhi) $(zlo) $(zhi)
+# region        	box block .8 2 .8 2 .8 2
+create_atoms  	4 random $(v_density_srd*v_vol) 1 box # create_atoms type random N_to_create seed region_ID
+set				type 4 mass 0.001
+set				type 4 diameter 0.0001
+### Group them all together and allow movmement, velocity, and SRD to theg roup
+group      		srd_particles type 4
+delete_atoms	overlap 0.5 flow srd_particles
+fix 			allow_srd_movement srd_particles nve/sphere
+velocity		srd_particles create 1 593849 loop geom # Create [temp seed]
+fix	        	enable_srd srd_particles srd 20 all 1 0.2 1 overlap yes cubic warn .5 lamda .6 inside warn
+fix 			srd_viscous srd_particles viscous 20
+
+## Box enviroment
+fix         containing_wall all wall/reflect zlo -1 zhi 6 # Prevents particles from flying off to infinity
+
+
+###############################################
+# Adjust tracking of neighbors for computational ease
+###############################################
+neigh_modify	exclude type 2 2 # No measuring the interction between wall particles
+neigh_modify	exclude type 3 3 # No measuring the interction between wall particles
+neigh_modify	exclude type 2 3 # No measuring the interction between wall particles
+neigh_modify 	exclude type 4 4 
+# neigh_modify	one 100000 # added because more SRD particles needed more bins for neighbors because there's so many
+# neigh_modify	page 10000000
+
+
+###############################################
+# ON SCREEN INFORMATION
+###############################################
+fix extra all print 100  	"""
+****************************************************************************
+*** Current Simulation is Initial Conditions PHASE I with parameters: 
+*** Vibration Amplitude = ${AMP} 
+*** step = ${step}
+*** Time = ${time}
+*** dt = ${dt}
+*** kn = ${kn}
+*** kt = ${kt}
+*** gamma_n = ${gamma_n}
+*** gamma_t = ${gamma_t}
+****************************************************************************
+"""
+
+###############################################
+# OUTPUTS
+###############################################
+dump movie_system all movie 10000 ./movies/movie_simple.mp4 type type zoom 1 size 1280 720
+dump_modify movie_system adiam 4 .05 adiam 2 .8 adiam 3 .8
+dump gif_system all movie 1000 ./movies/movie_simple.gif type type zoom 1 size 1280 720
+dump_modify gif_system adiam 4 .05 adiam 2 .8 adiam 3 .8
+run 100000000

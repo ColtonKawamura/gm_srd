@@ -49,7 +49,7 @@ timestep 	${dt}
 variable	time equal step*dt
 # variable	dimensionless_p equal ${P}*${d_ave}/${kn}
 variable	P equal ${dimensionless_p}*${kn}/${d_ave}
-variable	pressure_phase1 equal 20
+variable	pressure_phase1 equal 15 
 variable	pressure_phase2 equal 1
 
 if "${fric} == 1" then & 
@@ -76,7 +76,6 @@ pair_coeff	* *
 
 # viscosity
 fix 		apply_viscous all viscous 1
-
 ###############################################
 # Create and Adjust Particles
 ###############################################
@@ -99,21 +98,23 @@ fix 		allow_flow_movement flow nve/sphere
 
 ## SRD Particles
 ### Create the particles in a box
-variable     	density_srd equal 100  # number density
+variable     	density_srd equal 10  # number density
 variable     	vol equal 10
 region        	box block $(xlo) $(xhi) $(ylo) $(yhi) $(zlo) $(zhi)
 # region        	box block .8 2 .8 2 .8 2
 create_atoms  	4 random $(v_density_srd*v_vol) 1 box # create_atoms type random N_to_create seed region_ID
 set				type 4 mass 0.001
-set				type 4 diameter 0.001
+set				type 4 diameter 0.0001
 ### Group them all together and allow movmement, velocity, and SRD to theg roup
 group      		srd_particles type 4
 fix 			allow_srd_movement srd_particles nve/sphere
 velocity		srd_particles create 1 593849 loop geom # Create [temp seed]
 fix	        	enable_srd srd_particles srd 20 all 1 0.2 1 overlap yes cubic warn .5 lamda .6 inside warn
+fix 			srd_viscous srd_particles viscous 2
+delete_atoms	overlap 0.5 srd_particles flow
 
 ## Box enviroment
-fix         containing_wall all wall/reflect zlo -1 zhi .6 # Prevents particles from flying off to infinity
+fix         containing_wall all wall/reflect zlo -1 zhi 6 # Prevents particles from flying off to infinity
 
 ###############################################
 # Adjust tracking of neighbors for computational ease
