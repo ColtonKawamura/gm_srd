@@ -49,27 +49,22 @@ variable	dampflag equal 0 #1 on, 0 off for tangential damping
 pair_style gran/hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${xmu} ${dampflag} limit_damping
 pair_coeff	* *
 
-variable        wall_velocity equal 10
-region          wall block 1 9 1 9 1 3 move NULL NULL v_wall_velocity # xlo xhi ylo yhi zlo zhi
+variable        wallvel equal 1E-3
+# variable	    wallpos equal ${time}*${wallvel}
+# variable        wallpos equal (step/100000)
+variable	    wallpos equal (step/400000)*2*PI*1E-3
+region          wall block 1 9 1 9 1 3 move NULL NULL v_wallpos units box side in # xlo xhi ylo yhi zlo zhi
 fix             move_wall all wall/gran/region hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${xmu} ${dampflag} region wall
-neighbor        .6 bin
-
+# neighbor        6 bin
 
 ###############################################
 # ON SCREEN INFORMATION
 ###############################################
-fix extra all print 100  	"""
-****************************************************************************
-*** Current Simulation is Initial Conditions PHASE I with parameters: 
-*** step = ${step}
-*** Time = ${time}
-*** dt = ${dt}
-****************************************************************************
-"""
+fix extra all print 100000  	"""PHASE I:    ${time}    ${step}    ${dt}"""
 
 ###############################################
 # OUTPUTS
 ###############################################
 dump movie_system all movie 10000 ./movies/movie_simple.mp4 type type zoom 1 size 1280 720
 dump gif_system all movie 1000 ./movies/movie_simple.gif type type zoom 1 size 1280 720
-run 100000000
+run 10000000

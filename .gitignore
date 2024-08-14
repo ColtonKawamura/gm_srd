@@ -11,3 +11,4 @@
 *.mp4
 log.lammps
 \movies
+.DS_Store
