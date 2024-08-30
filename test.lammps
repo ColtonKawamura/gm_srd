@@ -47,10 +47,10 @@ pair_coeff	* *
 run 1000 post no # allow system to relax before evaluating the halt critera
 
 # Wall parameters
-variable	    topwallvelocity equal -(step/2000000)*1
+variable	    topwallvelocity equal -(step/2000000)*10
 variable	    bottomwallvelocity equal 0
-region          top_wall plane 1 1 4 0 0 -1 move NULL NULL v_topwallvelocity units box side in  #(xyz of point on plain) and (xyz of normal vector)
-region          bottom_wall plane 1 1 -1 0 0 .0001 move NULL NULL v_bottomwallvelocity units box side in
+region          top_wall plane 1 1 4 0 0 -1 move NULL NULL v_topwallvelocity units box side in 
+region          bottom_wall plane 1 1 0 0 0 .0001 move NULL NULL v_bottomwallvelocity units box side in
 # region          bottom_wall plane 1 1 0 0 0 1 move NULL NULL NULL units box
 fix		        top_wall_gran all wall/gran/region hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${coeffFric} 1 region top_wall
 fix		        bottom_wall_gran all wall/gran/region hooke/history ${kn} ${kt} ${gamma_n} ${gamma_t} ${coeffFric} 1 region bottom_wall
@@ -79,17 +79,11 @@ fix extra all print 1  	"""
 PHASE I:    
 Current Halt Factor: ${haltFactor}
 """
-# run 10000000
-# label 		loop
-# variable 	Loop_Count loop 10000
-# # run 		1000
-# if "${haltFactor} >= 1" then "jump SELF break"
-# next Loop_Count
-# jump SELF loop
-# label break
 
-# Use fix halt to stop the simulation when the condition is met
-fix halt_simulation all halt 1 v_haltFactor >= 1.0
-
-# Run the simulation
-run 10000000
+label 		loop
+variable 	Loop_Count loop 10000
+run 		10
+if "${haltFactor} >= 1" then "jump SELF break"
+next Loop_Count
+jump SELF loop
+label break

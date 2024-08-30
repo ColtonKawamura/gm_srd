@@ -58,7 +58,7 @@ fix		        bottom_wall_gran all wall/gran/region hooke/history ${kn} ${kt} ${g
 ###############################################
 # OUTPUTS
 ###############################################
-dump movie_system all movie 10000 ./movies/compress.mp4 type type zoom .5 size 1280 720
+dump movie_system all movie 10000 ./movies/compressNwiggle.mp4 type type zoom .5 size 1280 720
 dump_modify movie_system adiam 2 .05
 
 ###############################################
@@ -79,17 +79,23 @@ fix extra all print 1  	"""
 PHASE I:    
 Current Halt Factor: ${haltFactor}
 """
-# run 10000000
-# label 		loop
-# variable 	Loop_Count loop 10000
-# # run 		1000
-# if "${haltFactor} >= 1" then "jump SELF break"
-# next Loop_Count
-# jump SELF loop
-# label break
 
-# Use fix halt to stop the simulation when the condition is met
-fix halt_simulation all halt 1 v_haltFactor >= 1.0
+label 		loop
+variable 	Loop_Count loop 10000
+run 		1000
+if "${haltFactor} >= 1" then "jump SELF break"
+next Loop_Count
+jump SELF loop
+label break
 
-# Run the simulation
-run 10000000
+variable	    topwallvelocity equal (step/2000000)*1
+variable	    bottomwallvelocity equal 0
+
+fix extra all print 10000  	"""
+PHASE II:    
+Current Force / Goal Force: ${haltFactor}
+"""
+
+# fix halt_if_converged all halt 1000 v_haltFactor >= 1
+run		2000000 
+
